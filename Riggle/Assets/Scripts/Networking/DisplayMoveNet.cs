@@ -10,11 +10,17 @@ public class DisplayMoveNet : MonoBehaviour
     public GameObject playerPrefab;
     public float confirmPlayers = 3f;
 
-    private Dictionary<Guid, GameObject> prefabs;
+    private Dictionary<Guid, PlayerInfo> playerInfo;
+
+    private class PlayerInfo
+    {
+        public GameObject gameObject { get; set; }
+        public Vector3 targetLocation { get; set; }
+    }
 
     void Awake()
     {
-        prefabs = new Dictionary<Guid, GameObject>();
+        playerInfo = new Dictionary<Guid, PlayerInfo>();
     }
 
     // Start is called before the first frame update
@@ -25,17 +31,26 @@ public class DisplayMoveNet : MonoBehaviour
         {
             SetLocationResponse setLocationResponse = (SetLocationResponse) response;
 
-            GameObject player;
-            if(!prefabs.TryGetValue(setLocationResponse.Guid, out player))
+            PlayerInfo player;
+            if(!playerInfo.TryGetValue(setLocationResponse.Guid, out player))
             {
-                player = Instantiate(playerPrefab, setLocationResponse.Location, Quaternion.identity);
-                prefabs.Add(setLocationResponse.Guid, player);
+                player = new PlayerInfo();
+                player.gameObject = Instantiate(playerPrefab, setLocationResponse.Location, Quaternion.identity);
+                playerInfo.Add(setLocationResponse.Guid, player);
             }
 
-            player.transform.position = setLocationResponse.Location;
+            player.targetLocation = setLocationResponse.Location;
         });
 
         InvokeRepeating("ConfirmPlayers", confirmPlayers, confirmPlayers);
+    }
+
+    void Update()
+    {
+        foreach(PlayerInfo player in playerInfo.Values)
+        {
+            player.gameObject.transform.position = Vector3.Lerp(player.gameObject.transform.position, player.targetLocation, 10*Time.deltaTime);
+        }
     }
 
     public void ConfirmPlayers()
@@ -43,26 +58,26 @@ public class DisplayMoveNet : MonoBehaviour
         client.RequestRoomInfo((response) =>
         {
             RoomInfoResponse roomInfoResponse = (RoomInfoResponse) response;
-            Dictionary<Guid, GameObject> livingPrefabs = new Dictionary<Guid, GameObject>();
+            Dictionary<Guid, PlayerInfo> livingPrefabs = new Dictionary<Guid, PlayerInfo>();
             foreach(Guid guid in roomInfoResponse.Guids)
             {
-                GameObject player;
-                if(prefabs.TryGetValue(guid, out player))
+                PlayerInfo player;
+                if(playerInfo.TryGetValue(guid, out player))
                 {
                     livingPrefabs.Add(guid, player);
                 }
             }
 
-            foreach(Guid guid in prefabs.Keys)
+            foreach(Guid guid in playerInfo.Keys)
             {
                 if (livingPrefabs.ContainsKey(guid))
                     continue;
 
-                GameObject player = prefabs[guid];
-                Destroy(player);
+                PlayerInfo player = playerInfo[guid];
+                Destroy(player.gameObject);
             }
 
-            prefabs = livingPrefabs;
+            playerInfo = livingPrefabs;
         });
     }
 }
