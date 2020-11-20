@@ -13,6 +13,7 @@ public class RiggleClient : TCPClient
     public const short CREATE_ROOM = 4;
     public const short ROOM_INFO = 5;
     public const short SET_USERNAME = 6;
+    public const short SET_LOCATION = 7;
 
     // Parse incoming packets into a form we can use later. This is async.
     public override NetworkedResponse ParseIncomingPacket()
@@ -49,11 +50,23 @@ public class RiggleClient : TCPClient
                 {
                     roomInfoResponse.RoomCode = StringFromStream();
                     byte playerCount = BlockReceive(1)[0];
-                    roomInfoResponse.PlayerUsernames = new string[playerCount];
+                    roomInfoResponse.Guids = new Guid[playerCount];
+                    roomInfoResponse.Usernames = new string[playerCount];
                     for (byte i = 0; i < playerCount; i++)
-                        roomInfoResponse.PlayerUsernames[i] = StringFromStream();
+                    {
+                        roomInfoResponse.Guids[i] = Guid.Parse(StringFromStream());
+                        roomInfoResponse.Usernames[i] = StringFromStream();
+                    }
+                        
                 }
                 return roomInfoResponse;
+            case SET_LOCATION:
+                SetLocationResponse setLocationResponse = new SetLocationResponse();
+                setLocationResponse.Code = request;
+                setLocationResponse.Guid = Guid.Parse(StringFromStream());
+                byte[] bits = BlockReceive(12);
+                setLocationResponse.Location = new Vector3(BitConverter.ToSingle(bits, 0), BitConverter.ToSingle(bits, 4), BitConverter.ToSingle(bits, 8));
+                return setLocationResponse;
             default:
                 Debug.Log("Unknown request: " + request); // Uhh? Bad request code. We can't handle this.
                 return null;
@@ -73,7 +86,7 @@ public class RiggleClient : TCPClient
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(USER_ID, callback);
+        EnqueueCallback(USER_ID, callback);
     }
 
     // Request a Room. Call our callback when you get it.
@@ -90,7 +103,7 @@ public class RiggleClient : TCPClient
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(JOIN_ROOM, callback);
+        EnqueueCallback(JOIN_ROOM, callback);
     }
 
     // Request to leave the Room. Call our callback when you get a response.
@@ -105,7 +118,7 @@ public class RiggleClient : TCPClient
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(LEAVE_ROOM, callback);
+        EnqueueCallback(LEAVE_ROOM, callback);
     }
 
     // Request to create a new Room. Call our callback when you get a response.
@@ -118,28 +131,26 @@ public class RiggleClient : TCPClient
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(CREATE_ROOM, callback);
+        EnqueueCallback(CREATE_ROOM, callback);
     }
 
     // Request information on whos in your current room. Call our callback when you get a response.
     // Cast to RoomInfoResponse.
     public void RequestRoomInfo(NetworkDelegate callback)
     {
-        // Request a GUID
         byte[] buffer = Combine(
             BitConverter.GetBytes(HANDSHAKE),
             BitConverter.GetBytes(ROOM_INFO)
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(ROOM_INFO, callback);
+        EnqueueCallback(ROOM_INFO, callback);
     }
 
     // Request to set your username. Call our callback when you get a response.
     // Cast to SetUsernameResponse.
     public void RequestSetUsername(string username, NetworkDelegate callback)
     {
-        // Request a GUID
         byte[] buffer = Combine(
             BitConverter.GetBytes(HANDSHAKE),
             BitConverter.GetBytes(SET_USERNAME),
@@ -147,7 +158,24 @@ public class RiggleClient : TCPClient
         );
         SendAsyncByteStream(buffer);
 
-        EnqueueRequestCallback(SET_USERNAME, callback);
+        EnqueueCallback(SET_USERNAME, callback);
+    }
+
+    public void SendSetLocation(Vector3 location)
+    {
+        byte[] buffer = Combine(
+            BitConverter.GetBytes(HANDSHAKE),
+            BitConverter.GetBytes(SET_LOCATION),
+            BitConverter.GetBytes(location.x),
+            BitConverter.GetBytes(location.y),
+            BitConverter.GetBytes(location.z)
+        );
+        SendAsyncByteStream(buffer);
+    }
+
+    public void SetSetLocation(NetworkDelegate callback)
+    {
+        SetSingletonCallback(SET_LOCATION, callback);
     }
 }
 
@@ -176,5 +204,11 @@ public class SetUsernameResponse : NetworkedResponse
 public class RoomInfoResponse : StatusResponse
 {
     public string RoomCode { get; set; }
-    public string[] PlayerUsernames { get; set; }
+    public Guid[] Guids { get; set; }
+    public string[] Usernames { get; set; }
+}
+
+public class SetLocationResponse : GuidResponse
+{
+    public Vector3 Location { get; set; }
 }

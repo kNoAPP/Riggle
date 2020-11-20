@@ -23,12 +23,14 @@ public abstract class TCPClient : MonoBehaviour
     private ConcurrentQueue<NetworkedResponse> responseQueue;
     private Thread thread;
     private List<Queue<NetworkDelegate>> callbacks;
+    private List<NetworkDelegate> singletonCallbacks;
 
     // Start is called before the first frame update
     public void Awake()
     {
         // Get our callback queues ready to match requests to callbacks
         this.callbacks = new List<Queue<NetworkDelegate>>();
+        this.singletonCallbacks = new List<NetworkDelegate>();
 
         // Get our async queue ready to receive and process packets
         this.responseQueue = new ConcurrentQueue<NetworkedResponse>();
@@ -123,9 +125,19 @@ public abstract class TCPClient : MonoBehaviour
         NetworkedResponse response;
         while (responseQueue.TryDequeue(out response)) // Is there a task to process? 
         {
-            Queue<NetworkDelegate> queue = callbacks[response.Code]; // Get it's respective callback queue.
-            if (queue.Count > 0) // Is there someone waiting for the data?
-                queue.Dequeue()(response); // Give it to them. Call the callback.
+            if(response.Code < callbacks.Count)
+            {
+                Queue<NetworkDelegate> queue = callbacks[response.Code]; // Get it's respective callback queue.
+                if (queue.Count > 0) // Is there someone waiting for the data?
+                    queue.Dequeue()(response); // Give it to them. Call the callback.
+            }
+            
+            if(response.Code < singletonCallbacks.Count)
+            {
+                NetworkDelegate singleton = singletonCallbacks[response.Code]; // Get it's singleton callback
+                if (singleton != null) // Is one available?
+                    singleton(response); // Call it.
+            }
         }
     }
 
@@ -172,6 +184,9 @@ public abstract class TCPClient : MonoBehaviour
     // This lets us send bytes to the server. It is thread safe.
     protected void SendAsyncByteStream(byte[] byteData)
     {
+        if (!IsConnected())
+            return;
+
         socket.BeginSend(byteData, 0, byteData.Length, 0, new AsyncCallback((ar) => {
             socket.EndSend(ar);
         }), socket);
@@ -190,11 +205,19 @@ public abstract class TCPClient : MonoBehaviour
         return rv;
     }
 
-    protected void EnqueueRequestCallback(short request, NetworkDelegate callback)
+    protected void EnqueueCallback(short request, NetworkDelegate callback)
     {
         for(int i=callbacks.Count; i<=request; i++)
             callbacks.Add(new Queue<NetworkDelegate>());
         callbacks[request].Enqueue(callback);
+    }
+
+    protected void SetSingletonCallback(short request, NetworkDelegate callback)
+    {
+        for (int i = singletonCallbacks.Count; i <= request; i++)
+            singletonCallbacks.Add(null);
+
+        singletonCallbacks[request] = callback;
     }
 
     // Parse incoming packets into a form we can use later. This is async.

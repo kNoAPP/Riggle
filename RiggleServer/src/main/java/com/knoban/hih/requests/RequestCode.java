@@ -11,5 +11,6 @@ public class RequestCode {
     public static final short CREATE_ROOM = 4;
     public static final short ROOM_INFO = 5;
     public static final short SET_USERNAME = 6;
+    public static final short SET_LOCATION = 7;
 
 }

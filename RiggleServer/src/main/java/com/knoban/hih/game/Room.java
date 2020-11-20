@@ -44,6 +44,25 @@ public class Room {
     }
 
     /**
+     * Creates an empty Room players can join. Pretty much like a party system. The generated room code
+     * will be unique.
+     * @param leader The initial host of the lobby.
+     * @param code A forced room code.
+     * @throws IllegalStateException If the passed code already exists as a room.
+     */
+    public Room(@NotNull Player leader, String code) {
+        this.leader = leader;
+        players.add(leader);
+
+        if(getRoomFromCode(code) != null)
+            throw new IllegalStateException("Cannot create passed room. It already exists.");
+        this.code = new RoomCode(code);
+        ROOMS.put(this.code, this);
+
+        this.inGame = false;
+    }
+
+    /**
      * @return The leader of the Room. Only null if the room was destroyed, which should be never if you do things right.
      */
     @NotNull

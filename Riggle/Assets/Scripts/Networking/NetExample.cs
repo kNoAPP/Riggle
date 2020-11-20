@@ -72,7 +72,7 @@ public class NetExample : MonoBehaviour
             }
 
             Debug.Log("Players in your room (" + roomInfoResponse.RoomCode + "): ");
-            foreach(string username in roomInfoResponse.PlayerUsernames)
+            foreach(string username in roomInfoResponse.Usernames)
                 Debug.Log(username);
         });
 

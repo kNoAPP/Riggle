@@ -1,8 +1,10 @@
 package com.knoban.hih.player;
 
+import com.knoban.hih.game.Location;
 import com.knoban.hih.game.Room;
 import com.knoban.hih.requests.RequestCode;
 import com.knoban.hih.requests.impl.JoinRoomRequest;
+import com.knoban.hih.requests.impl.SetLocationRequest;
 import com.knoban.hih.requests.impl.SetUsernameRequest;
 import com.knoban.multiplayer.requests.GeneralRequestCode;
 import com.knoban.multiplayer.requests.RequestFulfillment;
@@ -21,6 +23,7 @@ public class Player extends MultiplayerConnection {
 
     private String username;
     private Room room;
+    private Location location;
 
     /**
      * Creates a new Player. This should only be called by MultiplayerServer.
@@ -29,6 +32,7 @@ public class Player extends MultiplayerConnection {
     protected Player(@NotNull Socket connection) {
         super(connection);
         this.username = "Unnamed Player";
+        this.location = new Location(0f, 0f, 0f);
     }
 
     /**
@@ -59,6 +63,8 @@ public class Player extends MultiplayerConnection {
                 return new JoinRoomRequest(in.readString());
             case RequestCode.SET_USERNAME:
                 return new SetUsernameRequest(in.readString());
+            case RequestCode.SET_LOCATION:
+                return new SetLocationRequest(new Location(in.readF32(), in.readF32(), in.readF32()));
             case RequestCode.USER_ID:
             case RequestCode.LEAVE_ROOM:
             case RequestCode.CREATE_ROOM:
@@ -78,6 +84,13 @@ public class Player extends MultiplayerConnection {
     public void handleRequest(short requestCode, @Nullable RequestFulfillment data) throws IOException {
         switch(requestCode) {
             case GeneralRequestCode.CONNECTED:
+                leaveRoom();
+                Room defaultRoom = Room.getRoomFromCode("AAAA");
+                if(defaultRoom == null)
+                    defaultRoom = new Room(this, "AAAA");
+                else
+                    defaultRoom.addPlayer(this);
+                room = defaultRoom;
                 return;
             case GeneralRequestCode.DISCONNECT:
                 leaveRoom();
@@ -144,8 +157,10 @@ public class Player extends MultiplayerConnection {
                 out.writeS8((byte) 0); // Ok 0x00 - printing room info
                 out.writeString(room.getRoomCode().toString());
                 out.writeS8((byte) room.getPlayers().size());
-                for(Player player : room.getPlayers())
+                for(Player player : room.getPlayers()) {
+                    out.writeString(uuid.toString());
                     out.writeString(player.username); // Prints player names. The first player is the host.
+                }
                 return;
             case RequestCode.SET_USERNAME:
                 System.out.println(Tools.formatSocket(connection) + ": SET_USERNAME");
@@ -156,6 +171,27 @@ public class Player extends MultiplayerConnection {
                 out.writeS16(GeneralRequestCode.HANDSHAKE);
                 out.writeS16(requestCode);
                 out.writeString(username);
+                return;
+            case RequestCode.SET_LOCATION:
+                System.out.println(Tools.formatSocket(connection) + ": SET_LOCATION: (" + uuid + ")");
+                assert data != null;
+                SetLocationRequest setLocationRequest = (SetLocationRequest) data;
+                location = setLocationRequest.getLocation();
+
+                if(room == null)
+                    return;
+
+                for(Player player : room.getPlayers()) {
+                    if(player.equals(this))
+                        continue;
+
+                    player.out.writeS16(GeneralRequestCode.HANDSHAKE);
+                    player.out.writeS16(requestCode);
+                    player.out.writeString(uuid.toString());
+                    player.out.writeF32(location.getX());
+                    player.out.writeF32(location.getY());
+                    player.out.writeF32(location.getZ());
+                }
                 return;
             default:
                 System.out.println("Got unknown request: " + requestCode);

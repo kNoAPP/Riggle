@@ -16,7 +16,7 @@ public class Main {
      */
     public static void main(String args[]) {
         try {
-            MultiplayerServer server = new MultiplayerServer(25575);
+            MultiplayerServer server = new MultiplayerServer(25580);
             server.setConnectionDriver(Player.class);
             server.open();
             server.startProcessingRequests();
